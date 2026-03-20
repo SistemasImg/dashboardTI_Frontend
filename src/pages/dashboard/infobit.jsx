@@ -11,7 +11,7 @@ import ScaleWrapper from '@/components/ScaleWrapper';
 import CustomSwal from '@/utils/customSwal';
 import { sendMessage } from '@/services/infobit/send.infobit';
 import { getAllMessages } from '@/services/infobit/getMessages';
-import { getAllAgents } from '../../services/agent/getAgents';
+import { getAllUsers } from '../../services/users/getUsers';
 
 const getStatusClasses = (status) => {
   switch (status) {
@@ -108,7 +108,10 @@ export function Infobit() {
 
   const fetchAgents = async () => {
     try {
-      const data = await getAllAgents();
+      const filters = {
+        role_id: '4,5',
+      };
+      const data = await getAllUsers(filters);
       setAgents(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching agents:', error);

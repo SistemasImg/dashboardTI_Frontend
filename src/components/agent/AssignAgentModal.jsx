@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
-import { getAllAgents } from '../../services/agent/getAgents';
-import { assignAgents } from '../../services/agent/assignAgent';
+import { getAllUsers } from '../../services/users/getUsers';
+import { assignAgents } from '../../services/caseAssignments/assignAgent';
 import { createPortal } from 'react-dom';
+
+function groupByCallCenter(list) {
+  return list.reduce((acc, agent) => {
+    acc[agent.callCenter.name] = acc[agent.callCenter.name] || [];
+    acc[agent.callCenter.name].push(agent);
+    return acc;
+  }, {});
+}
 
 export default function AssignAgentModal({
   caseNumber,
@@ -18,19 +26,14 @@ export default function AssignAgentModal({
 
   useEffect(() => {
     async function loadAgents() {
-      const data = await getAllAgents();
+      const filters = {
+        role_id: '4,5',
+      };
+      const data = await getAllUsers(filters);
       setAgents(data);
     }
     loadAgents();
   }, []);
-
-  function groupByCallCenter(list) {
-    return list.reduce((acc, agent) => {
-      acc[agent.call_center] = acc[agent.call_center] || [];
-      acc[agent.call_center].push(agent);
-      return acc;
-    }, {});
-  }
 
   async function handleSave() {
     setLoading(true);
@@ -47,7 +50,6 @@ export default function AssignAgentModal({
         agentId: selectedAgentId,
       });
     }
-
     const selectedAgent = agents.find((a) => a.id === selectedAgentId) || null;
 
     setLoading(false);

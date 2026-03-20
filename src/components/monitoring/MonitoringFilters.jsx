@@ -1,7 +1,4 @@
 import { TrashIcon } from '@heroicons/react/24/outline';
-import Label from '@/widgets/forms/label';
-import Select from '@/widgets/forms/select';
-import Option from '@/widgets/forms/option';
 import MultiSelectFilter from '@/components/monitoring/MultiSelectFilter';
 import SubstatusMultiSelect from './SubstatusMultiSelect';
 
@@ -9,6 +6,7 @@ export default function MonitoringFilters({
   cases,
   agentGroups = [],
   agents = [],
+  assigners = [],
   filters,
   setters,
   onClear,
@@ -39,6 +37,19 @@ export default function MonitoringFilters({
         options={[...new Set(cases.map((c) => c.ownerName).filter(Boolean))]}
         value={filters.filterOwnerName}
         onChange={setters.setFilterOwnerName}
+      />
+
+      {/* ASSIGNED BY (Role 3) */}
+      <MultiSelectFilter
+        label="Assigned By"
+        options={assigners.map((a) => a.fullname)}
+        value={filters.filterAssignerId
+          .map((id) => {
+            const user = assigners.find((a) => a.id === id);
+            return user ? user.fullname : '';
+          })
+          .filter(Boolean)}
+        onChange={setters.setFilterAssignerId}
       />
 
       {/* ORIGIN */}

@@ -4,7 +4,13 @@ import {
   Typography,
   CardBody,
 } from '@material-tailwind/react';
-import { MdEdit, MdDelete } from 'react-icons/md';
+import {
+  MdEdit,
+  MdDelete,
+  MdVisibility,
+  MdVisibilityOff,
+} from 'react-icons/md';
+import { useAuth } from '@/context/loginContext';
 import CustomSwal from '@/utils/customSwal';
 import Label from '@/widgets/forms/label';
 import Select from '@/widgets/forms/select';
@@ -13,10 +19,10 @@ import Input from '@/widgets/forms/input';
 import FormButtons from '@/components/uat/FormButtons';
 import { useState, useEffect, useRef } from 'react';
 import { getAllRoles } from '@/services/roles/getRoles';
+import { getAllCallCenters } from '@/services/callCenter/getCallCenter';
 import { useUsers } from '@/context/allUsers';
 import { createUser } from '@/services/users/createUser';
 import { updateUsers } from '@/services/users/updateUser';
-import { getAllUsers } from '@/services/users/getUsers';
 import { deleteUsers } from '@/services/users/deleteUser';
 import ScaleWrapper from '@/components/ScaleWrapper';
 
@@ -30,48 +36,82 @@ const toTitleCase = (text) => {
 };
 
 export function Users() {
+  const { user } = useAuth();
   const createUsersRef = useRef(null);
   const { users, refreshUsers } = useUsers();
-  const [localUsers, setLocalUsers] = useState(
-    Array.isArray(users) ? users : []
-  );
-
-  useEffect(() => {
-    setLocalUsers(Array.isArray(users) ? users : []);
-  }, [users]);
-
+  const [localUsers, setLocalUsers] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [callCenters, setCallCenters] = useState([]);
+  const [filterRole, setFilterRole] = useState('');
+  const [filterCallCenter, setFilterCallCenter] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [showPasswords, setShowPasswords] = useState({});
+
   //Add status for form
   const [fullname, setFullname] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
   const [role_id, setRole_id] = useState('');
   const [status, setStatus] = useState('active');
-  const [username, setUsername] = useState('');
+  const [call_center_id, setCall_center_id] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+
   const formDataUser = {
     fullname,
     email,
     password,
-    phone,
     role_id,
+    call_center_id,
     status,
-    username,
   };
 
-  //Functions
-  const getRoleName = (id) => {
-    const role = roles.find((role) => role.id === id);
-    return role ? role.name : 'Unknown';
+  const togglePassword = (id) => {
+    setShowPasswords((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
   };
+
+  useEffect(() => {
+    const base = Array.isArray(users) ? users : [];
+
+    const orderMap = {};
+    callCenters.forEach((c, index) => {
+      orderMap[c.id] = index;
+    });
+
+    const filtered = base
+      .filter((u) => {
+        if (user?.role_id === 3) {
+          const allowedRoles = [4, 5];
+          if (!allowedRoles.includes(u?.Role?.id)) return false;
+        }
+
+        if (filterRole && String(u?.Role?.id) !== String(filterRole))
+          return false;
+
+        if (
+          filterCallCenter &&
+          String(u?.callCenter?.id) !== String(filterCallCenter)
+        )
+          return false;
+
+        return true;
+      })
+      .sort((a, b) => {
+        const orderA = orderMap[a?.callCenter?.id] ?? 999;
+        const orderB = orderMap[b?.callCenter?.id] ?? 999;
+
+        return orderA - orderB;
+      });
+
+    setLocalUsers(filtered);
+  }, [users, filterRole, filterCallCenter, callCenters, user]);
 
   const reloadUsers = async () => {
     try {
       await refreshUsers();
-      // localUsers se actualiza via useEffect
     } catch (err) {
       console.error('Error reloading users:', err);
     }
@@ -80,24 +120,30 @@ export function Users() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const payload = await getAllCallCenters();
+        setCallCenters(Array.isArray(payload) ? payload : []);
+        if (payload?.length > 0) {
+          setCall_center_id(payload[0].id);
+        }
+
         const data = await getAllRoles();
         setRoles(Array.isArray(data) ? data : []);
       } catch (error) {
+        console.error('Error fetching data:', error);
         setRoles([]);
-        console.error('Error fetching roles:', error);
+        setCallCenters([]);
       }
-      setLocalUsers(Array.isArray(users) ? users : []);
     };
 
     fetchData();
-  }, [users]);
+  }, []);
 
   const handleEdit = (row) => {
+    console.log('Editing user:', row);
     setFullname(row.fullname || '');
     setEmail(row.email || '');
-    setUsername(row.username || '');
-    setPhone(row.phone || '');
-    setRole_id(row.role_id || '');
+    setCall_center_id(row.callCenter.id || '');
+    setRole_id(row.Role.id || '');
     setStatus(row.status || 'active');
     setEditingId(row.id ?? null);
     setTimeout(() => {
@@ -112,7 +158,7 @@ export function Users() {
   const handleDelete = (row) => {
     CustomSwal.fire({
       title: '¿Delete user??',
-      text: `Confirm deletion of ${row.fullname || row.username || 'this user'}.`,
+      text: `Confirm deletion of ${row.fullname || 'this user'}.`,
       icon: 'warning',
       confirmButtonText: 'Yes, delete',
     }).then((result) => {
@@ -143,11 +189,10 @@ export function Users() {
     e.preventDefault();
     const errors = {};
     if (!fullname.trim()) errors.fullname = true;
-    if (!username.trim()) errors.username = true;
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       errors.email = true;
     if (!role_id) errors.role_id = true;
-    if (phone.trim() && phone.length !== 9) errors.phone = true;
+    if (!call_center_id) errors.call_center_id = true;
 
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
@@ -159,12 +204,22 @@ export function Users() {
       return;
     }
 
-    const payload = { ...formDataUser, role_id: role_id };
+    const payload = { ...formDataUser };
+
+    if (user?.role_id === 3) {
+      if (![4, 5].includes(Number(role_id))) {
+        CustomSwal.fire({
+          icon: 'error',
+          title: 'Unauthorized',
+          text: 'You can only assign roles 4 or 5',
+        });
+        return;
+      }
+    }
 
     try {
       if (isEditing && editingId) {
-        const updatePayload = { id: editingId, ...payload };
-        await updateUsers(updatePayload);
+        await updateUsers({ id: editingId, ...payload });
         CustomSwal.fire({
           icon: 'success',
           title: 'Updated!',
@@ -199,17 +254,16 @@ export function Users() {
   const handleCancel = () => {
     setFullname('');
     setEmail('');
-    setUsername('');
+    setCall_center_id(callCenters[0]?.id || '');
     setPassword('');
     setStatus('active');
     setRole_id('');
-    setPhone('');
     setIsEditing(false);
     setEditingId(null);
   };
 
   return (
-    <ScaleWrapper scale={0.6} buffer={40}>
+    <ScaleWrapper scale={0.7} buffer={40}>
       <div className="mb-8 mt-12 flex flex-col gap-8 text-sm">
         <div ref={createUsersRef} />
         <Card color="white">
@@ -270,30 +324,21 @@ export function Users() {
                 )}
               </div>
 
-              {/* Username */}
+              {/* Call Center ✅ */}
               <div className="sm:col-span-3">
-                <Label htmlFor="username">Username</Label>
-                <Input
-                  id="username"
-                  name="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => {
-                    const cleaned = e.target.value.replace(
-                      /[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g,
-                      ''
-                    );
-                    setUsername(toTitleCase(cleaned));
-                    setFieldErrors((prev) => ({ ...prev, username: false }));
-                  }}
-                  className={fieldErrors.username ? 'border-red-500' : ''}
-                />
-                {fieldErrors.username && (
-                  <span className="mt-1 block text-xs text-red-500">
-                    This field is required
-                  </span>
-                )}
+                <Label>Call Center</Label>
+                <Select
+                  value={call_center_id}
+                  onChange={(e) => setCall_center_id(e.target.value)}
+                >
+                  {callCenters.map((c) => (
+                    <Option key={c.id} value={c.id}>
+                      {c.name}
+                    </Option>
+                  ))}
+                </Select>
               </div>
+
               {/* Password */}
               <div className="sm:col-span-3">
                 <Label htmlFor="password">Password</Label>
@@ -321,11 +366,18 @@ export function Users() {
                   <Option value="" disabled hidden>
                     Select Role
                   </Option>
-                  {roles.map((p) => (
-                    <Option key={p.id} value={p.id}>
-                      {p.name}
-                    </Option>
-                  ))}
+                  {roles
+                    .filter((r) => {
+                      if (user?.role_id === 3) {
+                        return [4, 5].includes(r.id);
+                      }
+                      return true;
+                    })
+                    .map((p) => (
+                      <Option key={p.id} value={p.id}>
+                        {p.name}
+                      </Option>
+                    ))}
                 </Select>
                 {fieldErrors.role_id && (
                   <span className="mt-1 block text-xs text-red-500">
@@ -333,36 +385,8 @@ export function Users() {
                   </span>
                 )}
               </div>
-              {/* Phone */}
-              <div className="sm:col-span-3">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="text"
-                  value={phone}
-                  onChange={(e) => {
-                    const digits = e.target.value
-                      .replace(/\D/g, '')
-                      .slice(0, 9);
-                    setPhone(digits);
-
-                    // solo error si hay algo y no es válido
-                    setFieldErrors((prev) => ({
-                      ...prev,
-                      phone: digits.length > 0 && digits.length !== 9,
-                    }));
-                  }}
-                  className={fieldErrors.phone ? 'border-red-500' : ''}
-                />
-
-                {fieldErrors.phone && phone.length > 0 && (
-                  <span className="mt-1 block text-xs text-red-500">
-                    The phone number must contain exactly 9 digits.
-                  </span>
-                )}
-              </div>
             </div>
+
             {/* Botones */}
             <FormButtons
               isEditing={isEditing}
@@ -382,14 +406,63 @@ export function Users() {
               Register Users
             </Typography>
           </CardHeader>
-          <CardBody className="overflow-x-scroll p-8 pb-2 pt-0">
+
+          <CardBody className="overflow-x-scroll p-8 pt-6">
+            <div className="mb-8 flex flex-wrap items-end gap-4">
+              <div className="w-48">
+                <Label>Role</Label>
+                <Select
+                  value={filterRole}
+                  onChange={(e) => setFilterRole(e.target.value)}
+                >
+                  <Option value="" disabled hidden>
+                    All Roles
+                  </Option>
+                  {roles.map((r) => (
+                    <Option key={r.id} value={r.id}>
+                      {r.name}
+                    </Option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="w-56">
+                <Label>Call Center</Label>
+                <Select
+                  value={filterCallCenter}
+                  onChange={(e) => setFilterCallCenter(e.target.value)}
+                >
+                  <Option value="" disabled hidden>
+                    All Call Centers
+                  </Option>
+                  {callCenters.map((c) => (
+                    <Option key={c.id} value={c.id}>
+                      {c.name}
+                    </Option>
+                  ))}
+                </Select>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterRole('');
+                  setFilterCallCenter('');
+                }}
+                className="flex items-center gap-2 rounded bg-gray-300 px-3 py-2"
+              >
+                Clear
+              </button>
+            </div>
+
             <table className="w-full min-w-[600px] table-auto border text-xs sm:text-sm">
               <thead>
                 <tr>
                   <th className="border px-4 py-2">Full Name</th>
                   <th className="border px-4 py-2">Email</th>
                   <th className="border px-4 py-2">Role</th>
-                  <th className="border px-4 py-2">Status</th>
+                  <th className="border px-4 py-2">Call Center</th>
+                  <th className="border px-4 py-2">Password</th>
                   <th className="border px-4 py-2">Date of Entry</th>
                 </tr>
               </thead>
@@ -408,10 +481,32 @@ export function Users() {
                     >
                       <td className="border px-4 py-2">{row.fullname}</td>
                       <td className="border px-4 py-2">{row.email}</td>
+                      <td className="border px-4 py-2">{row.Role.name}</td>
                       <td className="border px-4 py-2">
-                        {getRoleName(row.role_id)}
+                        {row.callCenter.name}
                       </td>
-                      <td className="border px-4 py-2">{row.status}</td>
+                      <td className="border px-4 py-2">
+                        <div className="flex items-center justify-center gap-2">
+                          <span>
+                            {showPasswords[row.id]
+                              ? row.log_pass || '-'
+                              : '•••••••••••••••••'}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => togglePassword(row.id)}
+                            className="text-gray-600 hover:text-black"
+                            title="Show / Hide Password"
+                          >
+                            {showPasswords[row.id] ? (
+                              <MdVisibilityOff size={18} />
+                            ) : (
+                              <MdVisibility size={18} />
+                            )}
+                          </button>
+                        </div>
+                      </td>
                       <td className="border px-4 py-2">
                         {row.created_at || ''}
                       </td>

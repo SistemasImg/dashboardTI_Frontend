@@ -4,15 +4,25 @@ import {
   CardHeader,
   CardBody,
   Typography,
+  Dialog,
+  DialogHeader,
+  DialogBody,
+  DialogFooter,
+  Button,
+  Input,
 } from '@material-tailwind/react';
 import CustomSwal from '@/utils/customSwal';
 import { monitoringAttemps } from '@/services/salesforce/monitoring';
 import AgentCell from '../../components/agent/AgentCell';
 import MonitoringFilters from '../../components/monitoring/MonitoringFilters';
+import MultiSelectFilter from '../../components/monitoring/MultiSelectFilter';
 import BulkActionsBar from '../../components/monitoring/BulkActionsBar';
 import AssignAgentModal from '../../components/agent/AssignAgentModal';
-import { getAllAgents } from '../../services/agent/getAgents';
+import { getAllUsers } from '../../services/users/getUsers';
+import { casesAssignmentsAll } from '@/services/caseAssignments/allCasesAssignments';
 import { monitoringReport } from '../../utils/excelsExport/monitoringExcel';
+import { assignmentsReport } from '../../utils/excelsExport/assignmentsExcel';
+import { getAllCallCenters } from '@/services/callCenter/getCallCenter';
 import {
   ArrowPathIcon,
   DocumentArrowDownIcon,
@@ -46,6 +56,17 @@ const getAttemptValue = (row, source) => {
   return Number(row?.[source] ?? null);
 };
 
+const getPeruDateString = () => {
+  const now = new Date();
+  const lima = new Date(
+    now.toLocaleString('en-US', { timeZone: 'America/Lima' })
+  );
+  const yyyy = lima.getFullYear();
+  const mm = String(lima.getMonth() + 1).padStart(2, '0');
+  const dd = String(lima.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 export function Monitoring() {
   const { user } = useAuth();
   const [cases, setCases] = useState([]);
@@ -61,20 +82,33 @@ export function Monitoring() {
   const [filterAgentGroup, setFilterAgentGroup] = useState([]);
 
   const [agents, setAgents] = useState([]);
+  const [assigners, setAssigners] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [filterOwnerName, setFilterOwnerName] = useState('');
+  const [filterAssignerId, setFilterAssignerId] = useState([]);
 
   const [sortConfig, setSortConfig] = useState({
     key: null,
-    direction: 'asc', // 'asc' | 'desc'
+    direction: 'asc',
   });
 
   const [agentGroups, setAgentGroups] = useState([]);
+  const [callCenters, setCallCenters] = useState([]);
   const [attemptColorFilter, setAttemptColorFilter] = useState([]);
   const [attemptSource, setAttemptSource] = useState('attempts1');
 
   const [selectedCaseNumbers, setSelectedCaseNumbers] = useState([]);
   const [openBulkAssign, setOpenBulkAssign] = useState(false);
+
+  // Estados para el modal de búsqueda de asignaciones
+  const [openSearchAssignments, setOpenSearchAssignments] = useState(false);
+  const [searchFilters, setSearchFilters] = useState({
+    startDate: getPeruDateString(),
+    endDate: '',
+    assignedAgentId: [],
+    agentGroup: [],
+    assignedById: [],
+  });
 
   const fetchMonitoring = async (isAuto = false) => {
     if (!isAuto) {
@@ -124,7 +158,6 @@ export function Monitoring() {
       return [caseNumber];
     });
 
-    // Solo actualizamos el índice base si NO es ctrl
     if (!event?.ctrlKey && !event?.metaKey) {
       setLastSelectedIndex(index);
     }
@@ -147,18 +180,32 @@ export function Monitoring() {
   }, []);
 
   useEffect(() => {
-    async function loadAgents() {
-      const data = await getAllAgents();
-      setAgents(data);
+    async function loadUsers() {
+      try {
+        const [agentsData, assignersData] = await Promise.all([
+          getAllUsers({ role_id: '4,5' }),
+          getAllUsers({ role_id: '3' }),
+        ]);
 
-      const groups = [
-        ...new Set(data.map((a) => a.call_center).filter(Boolean)),
-      ];
+        setAgents(agentsData);
+        setAssigners(assignersData);
 
-      setAgentGroups(groups);
+        const groups = [
+          ...new Set(agentsData.map((a) => a.call_center).filter(Boolean)),
+        ];
+        setAgentGroups(groups);
+      } catch (error) {
+        console.error('Error loading users:', error);
+      }
     }
 
-    loadAgents();
+    async function loadCallCenters() {
+      const data = await getAllCallCenters();
+      setCallCenters(Array.isArray(data) ? data : []);
+    }
+
+    loadUsers();
+    loadCallCenters();
   }, []);
 
   useEffect(() => {
@@ -183,6 +230,14 @@ export function Monitoring() {
         !filterOwnerName.includes(row.ownerName)
       ) {
         return false;
+      }
+
+      if (filterAssignerId.length > 0) {
+        const allowedAssignerNames = assigners
+          .filter((u) => filterAssignerId.includes(u.id))
+          .map((u) => u.fullname);
+
+        if (!allowedAssignerNames.includes(row.ownerName)) return false;
       }
 
       if (
@@ -252,6 +307,88 @@ export function Monitoring() {
     setFilterAgentGroup([]);
     setFilterAgentId([]);
     setFilterOwnerName('');
+    setFilterAssignerId([]);
+  };
+
+  const handleSetFilterAssignerId = (selectedNames) => {
+    setFilterAssignerId(
+      selectedNames
+        .map((name) => assigners.find((a) => a.fullname === name)?.id)
+        .filter(Boolean)
+    );
+  };
+
+  const handleSearchAssignments = async () => {
+    const hasFilter =
+      searchFilters.startDate ||
+      searchFilters.endDate ||
+      searchFilters.assignedAgentId.length > 0 ||
+      searchFilters.agentGroup.length > 0 ||
+      searchFilters.assignedById.length > 0;
+
+    if (!hasFilter) {
+      CustomSwal.fire({
+        icon: 'warning',
+        title: 'Required Filter',
+        text: 'Please select at least one filter.',
+      });
+      return;
+    }
+
+    try {
+      const filters = {};
+
+      if (searchFilters.startDate) filters.date_from = searchFilters.startDate;
+
+      if (searchFilters.endDate) filters.date_to = searchFilters.endDate;
+
+      if (searchFilters.assignedAgentId.length > 0) {
+        filters.agent_id = searchFilters.assignedAgentId;
+      }
+
+      if (searchFilters.agentGroup.length > 0) {
+        filters.call_center_id = searchFilters.agentGroup;
+      }
+
+      if (searchFilters.assignedById.length > 0) {
+        filters.created_by = searchFilters.assignedById;
+      }
+
+      const data = await casesAssignmentsAll(filters);
+
+      // 📊 Download Excel
+      if (Array.isArray(data) && data.length > 0) {
+        assignmentsReport(data);
+      }
+
+      CustomSwal.fire({
+        icon: 'success',
+        title: 'Search Completed',
+        text: `Found ${data.length || 0} assignments.`,
+      });
+
+      console.log('data--', data);
+      // 👉 AQUÍ puedes guardar resultados si quieres mostrarlos
+      // setAssignments(data);
+
+      setOpenSearchAssignments(false);
+
+      setSearchFilters({
+        startDate: '',
+        endDate: '',
+        assignedAgentId: [],
+        agentGroup: [],
+        assignedById: [],
+      });
+    } catch (error) {
+      console.error('Error searching assignments:', error);
+
+      CustomSwal.fire({
+        icon: 'error',
+        title: 'Search Failed',
+        text: 'Error searching assignments.',
+      });
+    }
   };
 
   const headerDates = useMemo(() => {
@@ -398,6 +535,16 @@ export function Monitoring() {
                 <DocumentArrowDownIcon className="h-5 w-5" />
                 Export Excel
               </button>
+
+              <button
+                type="button"
+                onClick={() => setOpenSearchAssignments(true)}
+                disabled={loading}
+                className={`flex items-center gap-2 rounded px-3 py-1 text-white transition
+                ${loading ? 'cursor-not-allowed bg-gray-400' : 'bg-[#1A1A1A] hover:bg-[#000000]'}`}
+              >
+                Search Assignments
+              </button>
             </div>
           </CardHeader>
           {openBulkAssign && (
@@ -410,10 +557,146 @@ export function Monitoring() {
               }}
             />
           )}
+
+          <Dialog
+            open={openSearchAssignments}
+            handler={() => setOpenSearchAssignments(false)}
+            size="lg"
+          >
+            <DialogHeader>Search Case Assignments</DialogHeader>
+            <DialogBody divider className="space-y-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <Typography variant="small" className="mb-2 font-medium">
+                    Start Date
+                  </Typography>
+                  <Input
+                    type="date"
+                    value={searchFilters.startDate}
+                    onChange={(e) =>
+                      setSearchFilters((prev) => ({
+                        ...prev,
+                        startDate: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Typography variant="small" className="mb-2 font-medium">
+                    End Date
+                  </Typography>
+                  <Input
+                    type="date"
+                    value={searchFilters.endDate}
+                    onChange={(e) =>
+                      setSearchFilters((prev) => ({
+                        ...prev,
+                        endDate: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <MultiSelectFilter
+                label="Assigned Agent"
+                options={agents.map((a) => a.fullname)}
+                value={searchFilters.assignedAgentId
+                  .map((id) => {
+                    const agent = agents.find((a) => a.id === id);
+                    return agent ? agent.fullname : '';
+                  })
+                  .filter(Boolean)}
+                disabled={searchFilters.agentGroup.length > 0}
+                onChange={(selectedNames) =>
+                  setSearchFilters((prev) => ({
+                    ...prev,
+                    assignedAgentId: selectedNames
+                      .map(
+                        (name) => agents.find((a) => a.fullname === name)?.id
+                      )
+                      .filter(Boolean),
+                    agentGroup: selectedNames.length > 0 ? [] : prev.agentGroup,
+                  }))
+                }
+              />
+
+              <MultiSelectFilter
+                label="Assigned By"
+                options={assigners.map((a) => a.fullname)}
+                value={searchFilters.assignedById
+                  .map((id) => {
+                    const user = assigners.find((a) => a.id === id);
+                    return user ? user.fullname : '';
+                  })
+                  .filter(Boolean)}
+                onChange={(selectedNames) =>
+                  setSearchFilters((prev) => ({
+                    ...prev,
+                    assignedById: selectedNames
+                      .map(
+                        (name) => assigners.find((a) => a.fullname === name)?.id
+                      )
+                      .filter(Boolean),
+                  }))
+                }
+              />
+
+              <MultiSelectFilter
+                label="Agent Group (Call Center)"
+                options={callCenters.map((c) => c.name)}
+                value={searchFilters.agentGroup
+                  .map((id) => {
+                    const cc = callCenters.find((c) => c.id === id);
+                    return cc ? cc.name : '';
+                  })
+                  .filter(Boolean)}
+                disabled={searchFilters.assignedAgentId.length > 0}
+                onChange={(selectedNames) =>
+                  setSearchFilters((prev) => ({
+                    ...prev,
+                    agentGroup: selectedNames
+                      .map(
+                        (name) => callCenters.find((c) => c.name === name)?.id
+                      )
+                      .filter(Boolean),
+                    assignedAgentId:
+                      selectedNames.length > 0 ? [] : prev.assignedAgentId,
+                  }))
+                }
+              />
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                variant="text"
+                color="red"
+                onClick={() => {
+                  setOpenSearchAssignments(false);
+                  setSearchFilters({
+                    startDate: getPeruDateString(),
+                    endDate: '',
+                    assignedAgentId: [],
+                    agentGroup: [],
+                    assignedById: [],
+                  });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="gradient"
+                color="black"
+                onClick={handleSearchAssignments}
+              >
+                Search
+              </Button>
+            </DialogFooter>
+          </Dialog>
           <CardBody className="relative overflow-visible p-6">
             <MonitoringFilters
               cases={cases}
               agentGroups={agentGroups}
+              assigners={assigners}
               filters={{
                 filterOrigin,
                 filterType,
@@ -422,6 +705,7 @@ export function Monitoring() {
                 filterAgentGroup,
                 filterAgentId,
                 filterOwnerName,
+                filterAssignerId,
               }}
               setters={{
                 setFilterOrigin,
@@ -431,6 +715,7 @@ export function Monitoring() {
                 setFilterAgentGroup,
                 setFilterAgentId,
                 setFilterOwnerName,
+                handleSetFilterAssignerId,
               }}
               onSearch={handleSearch}
               onClear={clearFilters}

@@ -98,7 +98,15 @@ export const getRoutes = (user) => {
   return allRoutes.map((route) => ({
     ...route,
     pages: route.pages.filter((page) => {
-      if (user?.role_id === 3 || user?.role_id === 4) {
+      if (user?.role_id === 3 || user?.role_id === 2) {
+        return (
+          page.name === 'Monitoring' ||
+          page.name === 'Api Send' ||
+          page.name === 'Home' ||
+          page.name === 'Infobip' ||
+          page.name === 'Users'
+        );
+      } else if (user?.role_id === 4) {
         return (
           page.name === 'Monitoring' ||
           page.name === 'Api Send' ||

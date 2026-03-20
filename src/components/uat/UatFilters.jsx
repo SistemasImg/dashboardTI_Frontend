@@ -31,7 +31,7 @@ export default function UatFilters({
                 value={filterValues[filter.key]}
                 onChange={(e) => filterSetters[filter.key](e.target.value)}
               >
-                <Option value="" disabled hidden>
+                <Option value="" hidden disabled>
                   All
                 </Option>
                 {Array.isArray(options) &&

@@ -7,6 +7,7 @@ export default function MultiSelectFilter({
   value = [],
   onChange,
   single = false,
+  disabled = false,
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -38,13 +39,16 @@ export default function MultiSelectFilter({
   const displayValues = single ? (value ? [value] : []) : value;
 
   return (
-    <div ref={ref} className="relative min-w-[220px]">
+    <div
+      ref={ref}
+      className={`relative min-w-[220px] ${disabled ? 'pointer-events-none opacity-50' : ''}`}
+    >
       <Label>{label}</Label>
 
       {/* INPUT VISUAL */}
       <div
-        onClick={() => setOpen(!open)}
-        className="flex min-h-[42px] cursor-pointer flex-wrap items-center gap-1 rounded-lg border-2 border-black bg-white px-3 py-1"
+        onClick={() => !disabled && setOpen(!open)}
+        className={`flex min-h-[42px] ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'} flex-wrap items-center gap-1 rounded-lg border-2 border-black bg-white px-3 py-1`}
       >
         {displayValues.length === 0 ? (
           <span className="text-sm text-gray-400">All</span>
