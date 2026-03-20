@@ -102,6 +102,7 @@ export function Users() {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [showPasswords, setShowPasswords] = useState({});
+  const [loadingSubmit, setLoadingSubmit] = useState(false);
 
   //Add status for form
   const [fullname, setFullname] = useState('');
@@ -127,6 +128,15 @@ export function Users() {
       [id]: !prev[id],
     }));
   };
+
+  const selectedCallCenter = callCenters.find(
+    (c) => String(c.id) === String(call_center_id)
+  );
+
+  const callCenterName = selectedCallCenter?.name?.toLowerCase();
+
+  const isIMG = callCenterName === 'img';
+  const isCaseReady = callCenterName === 'case ready intake';
 
   useEffect(() => {
     const base = Array.isArray(users) ? users : [];
@@ -176,6 +186,18 @@ export function Users() {
       setEmail(newEmail);
     }
   }, [fullname, call_center_id, callCenters]);
+
+  useEffect(() => {
+    if (!call_center_id || !callCenterName) return;
+
+    if (callCenterName === 'img') return;
+
+    if (callCenterName === 'case ready intake') {
+      setRole_id(4);
+    } else {
+      setRole_id(5);
+    }
+  }, [call_center_id, callCenterName]);
 
   const reloadUsers = async () => {
     try {
@@ -255,6 +277,9 @@ export function Users() {
   // Handler submit
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (loadingSubmit) return;
+
     const errors = {};
     if (!fullname.trim()) errors.fullname = true;
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
@@ -263,6 +288,7 @@ export function Users() {
     if (!call_center_id) errors.call_center_id = true;
 
     setFieldErrors(errors);
+
     if (Object.keys(errors).length > 0) {
       CustomSwal.fire({
         icon: 'error',
@@ -286,6 +312,8 @@ export function Users() {
     }
 
     try {
+      setLoadingSubmit(true);
+
       if (isEditing && editingId) {
         await updateUsers({ id: editingId, ...payload });
         CustomSwal.fire({
@@ -293,8 +321,6 @@ export function Users() {
           title: 'Updated!',
           text: 'Data updated successfully',
         });
-        handleCancel();
-        reloadUsers();
       } else {
         await createUser(payload);
         CustomSwal.fire({
@@ -302,19 +328,19 @@ export function Users() {
           title: 'Created!',
           text: 'Data saved successfully',
         });
-        handleCancel();
-        reloadUsers();
       }
-      setIsEditing(false);
-      setEditingId(null);
+
+      handleCancel();
+      reloadUsers();
     } catch (error) {
       CustomSwal.fire({
         icon: 'error',
         title: 'Error',
         text: 'Error while saving the data',
       });
-      reloadUsers();
       console.error('Error submitting user:', error);
+    } finally {
+      setLoadingSubmit(false);
     }
   };
 
@@ -355,12 +381,15 @@ export function Users() {
                   type="text"
                   value={fullname}
                   onChange={(e) => {
-                    const cleaned = e.target.value.replace(
+                    const cleaned = e.target.value.replaceAll(
                       /[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g,
                       ''
                     );
-                    setFullname(toTitleCase(cleaned));
+                    setFullname(cleaned);
                     setFieldErrors((prev) => ({ ...prev, fullname: false }));
+                  }}
+                  onBlur={() => {
+                    setFullname((prev) => toTitleCase(prev));
                   }}
                   className={fieldErrors.fullname ? 'border-red-500' : ''}
                 />
@@ -438,6 +467,7 @@ export function Users() {
                   id="idRole"
                   name="idRole"
                   value={role_id}
+                  disabled={!isIMG}
                   onChange={(e) => {
                     setRole_id(e.target.value);
                     setFieldErrors((prev) => ({ ...prev, role_id: false }));
@@ -449,10 +479,18 @@ export function Users() {
                   </Option>
                   {roles
                     .filter((r) => {
-                      if (user?.role_id === 3) {
-                        return [4, 5].includes(r.id);
+                      if (isIMG) {
+                        if (user?.role_id === 3) {
+                          return [4, 5].includes(r.id);
+                        }
+                        return true;
                       }
-                      return true;
+
+                      if (isCaseReady) {
+                        return r.id === 4;
+                      }
+
+                      return r.id === 5;
                     })
                     .map((p) => (
                       <Option key={p.id} value={p.id}>
@@ -473,6 +511,7 @@ export function Users() {
               isEditing={isEditing}
               editingId={editingId}
               onCancel={handleCancel}
+              loading={loadingSubmit}
               className="flex-col sm:flex-row"
             />
           </form>
@@ -499,11 +538,18 @@ export function Users() {
                   <Option value="" disabled hidden>
                     All Roles
                   </Option>
-                  {roles.map((r) => (
-                    <Option key={r.id} value={r.id}>
-                      {r.name}
-                    </Option>
-                  ))}
+                  {roles
+                    .filter((r) => {
+                      if (user?.role_id === 3) {
+                        return [4, 5].includes(r.id);
+                      }
+                      return true;
+                    })
+                    .map((r) => (
+                      <Option key={r.id} value={r.id}>
+                        {r.name}
+                      </Option>
+                    ))}
                 </Select>
               </div>
 

@@ -169,7 +169,7 @@ export function Home() {
           <LastRecord
             title="Last Agent Added"
             name={data.agents.last?.fullname}
-            extra={data.agents.last?.call_center}
+            extra={data.agents.last?.callCenter.name}
             date={data.agents.last?.created_at}
           />
         </div>
@@ -257,7 +257,13 @@ function LastRecord({ title, name, extra, date }) {
           <Typography className="text-xs text-gray-500">{extra}</Typography>
         )}
         <Typography className="text-xs text-gray-400">
-          {date ? new Date(date).toLocaleString() : '-'}
+          {date
+            ? new Date(date).toLocaleDateString('es-PE', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+              })
+            : '-'}
         </Typography>
       </CardBody>
     </Card>

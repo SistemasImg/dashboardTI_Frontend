@@ -39,19 +39,6 @@ export default function MonitoringFilters({
         onChange={setters.setFilterOwnerName}
       />
 
-      {/* ASSIGNED BY (Role 3) */}
-      <MultiSelectFilter
-        label="Assigned By"
-        options={assigners.map((a) => a.fullname)}
-        value={filters.filterAssignerId
-          .map((id) => {
-            const user = assigners.find((a) => a.id === id);
-            return user ? user.fullname : '';
-          })
-          .filter(Boolean)}
-        onChange={setters.setFilterAssignerId}
-      />
-
       {/* ORIGIN */}
       <MultiSelectFilter
         label="Origin"
