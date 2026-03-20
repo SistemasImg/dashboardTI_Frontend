@@ -35,6 +35,61 @@ const toTitleCase = (text) => {
     .join(' ');
 };
 
+const generatePassword = () => {
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lower = 'abcdefghijklmnopqrstuvwxyz';
+  const numbers = '0123456789';
+  const symbols = '!@#$%&*';
+
+  const getRandom = (str) => str[Math.floor(Math.random() * str.length)];
+
+  let password =
+    getRandom(upper) +
+    getRandom(lower) +
+    getRandom(numbers) +
+    getRandom(symbols);
+
+  const all = upper + lower + numbers + symbols;
+
+  while (password.length < 8) {
+    password += getRandom(all);
+  }
+
+  // mezclar
+  return password
+    .split('')
+    .sort(() => Math.random() - 0.5)
+    .join('');
+};
+
+const generateEmail = (fullname, callCenterName) => {
+  if (!fullname || !callCenterName) return '';
+
+  const base = fullname
+    .toLowerCase()
+    .normalize('NFD')
+    .replaceAll(/[\u0300-\u036f]/g, '')
+    .replaceAll('ñ', 'n')
+    .replaceAll(/[^a-z\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .join('.');
+
+  let domain = callCenterName
+    .toLowerCase()
+    .normalize('NFD')
+    .replaceAll(/[\u0300-\u036f]/g, '')
+    .replaceAll('ñ', 'n')
+    .replaceAll(/[^a-z\s]/g, '')
+    .replaceAll(/\s+/g, '');
+
+  if (domain === 'img') {
+    domain = 'img360';
+  }
+
+  return `${base}@${domain}.com`;
+};
+
 export function Users() {
   const { user } = useAuth();
   const createUsersRef = useRef(null);
@@ -108,6 +163,19 @@ export function Users() {
 
     setLocalUsers(filtered);
   }, [users, filterRole, filterCallCenter, callCenters, user]);
+
+  useEffect(() => {
+    const selectedCallCenter = callCenters.find(
+      (c) => String(c.id) === String(call_center_id)
+    );
+
+    const callCenterName = selectedCallCenter?.name;
+
+    if (fullname && callCenterName) {
+      const newEmail = generateEmail(fullname, callCenterName);
+      setEmail(newEmail);
+    }
+  }, [fullname, call_center_id, callCenters]);
 
   const reloadUsers = async () => {
     try {
@@ -342,14 +410,27 @@ export function Users() {
               {/* Password */}
               <div className="sm:col-span-3">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="text"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type="text"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pr-24"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setPassword(generatePassword())}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-gray-800 px-2 py-1 text-xs text-white hover:bg-black"
+                  >
+                    Generate
+                  </button>
+                </div>
               </div>
+
               {/* Position */}
               <div className="sm:col-span-3">
                 <Label htmlFor="position">Position</Label>
