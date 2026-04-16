@@ -71,7 +71,7 @@ export default function MonitoringFilters({
       />
 
       {/* AGENT GROUP */}
-      {![4, 5, 7].includes(user?.role_id) && (
+      {![4, 5, 7, 8].includes(user?.role_id) && (
         <MultiSelectFilter
           label="Agent Group"
           options={agentGroupsFromCases}
@@ -81,7 +81,7 @@ export default function MonitoringFilters({
       )}
 
       {/* AGENT */}
-      {![4, 5, 7].includes(user?.role_id) && (
+      {![4, 5, 7, 8].includes(user?.role_id) && (
         <MultiSelectFilter
           label="Agent"
           options={['Unassigned', ...filteredAgents.map((a) => a.fullname)]}

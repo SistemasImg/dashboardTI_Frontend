@@ -14,10 +14,7 @@ import {
 import { summary } from '@/services/summary';
 import { useAuth } from '@/context/loginContext';
 import { casesAssignments } from '@/services/caseAssignments/getCasesAssignments';
-import {
-  getAttemptsxAgent,
-  downloadAttemptsxAgent,
-} from '@/services/sqlserver/getAttemptsxAgent';
+import { getAttemptsxAgent } from '@/services/sqlserver/getAttemptsxAgent';
 import AgentCasesCard from '@/components/home/AgentCasesCard';
 import {
   Chart as ChartJS,
@@ -55,7 +52,7 @@ export function Home() {
   const [isLoadingAttempts, setIsLoadingAttempts] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const restrictedRoles = [4, 5, 7];
+  const restrictedRoles = [4, 5, 7, 8];
   const isRestrictedRole = restrictedRoles.includes(user?.role_id);
 
   useEffect(() => {
